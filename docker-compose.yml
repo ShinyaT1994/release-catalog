@@ -1,0 +1,20 @@
+services:
+  release-catalog:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - RC_DATABASE_DRIVER=sqlite
+      - RC_DATABASE_DSN=/data/release-catalog.db
+      - RC_DT_BASE_URL=http://host.docker.internal:8081
+      - RC_DT_API_KEY=${DT_API_KEY:-}
+      - RC_DT_STUB_MODE=true
+      - RC_SERVER_PORT=8080
+      - RC_LOG_LEVEL=info
+    volumes:
+      - rc-data:/data
+
+volumes:
+  rc-data:

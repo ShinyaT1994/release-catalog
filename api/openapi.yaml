@@ -1,0 +1,646 @@
+openapi: "3.1.0"
+info:
+  title: Release Catalog API
+  description: |
+    Dependency-Track連携型 Release Catalog API。
+    製品のMain/Release Branch管理、SBOM構成のBOM-Linkグラフ解決を提供する。
+  version: "1.0.0"
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  /api/v1/products:
+    post:
+      summary: Create a product
+      operationId: createProduct
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProductInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+    get:
+      summary: List products
+      operationId: listProducts
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Product"
+
+  /api/v1/products/{productId}:
+    get:
+      summary: Get a product
+      operationId: getProduct
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: Update a product
+      operationId: updateProduct
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateProductInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a product
+      operationId: deleteProduct
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/products/{productId}/branches:
+    get:
+      summary: List branches for a product
+      operationId: listBranches
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/BranchLine"
+
+  /api/v1/products/{productId}/release-lines:
+    post:
+      summary: Create a release line
+      operationId: createReleaseLine
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReleaseLineInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchLine"
+
+  /api/v1/branches/{branchId}:
+    get:
+      summary: Get a branch
+      operationId: getBranch
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchLine"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: Update a branch
+      operationId: updateBranch
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBranchInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BranchLine"
+
+  /api/v1/branches/{branchId}/current:
+    get:
+      summary: Get branch current state
+      operationId: getBranchCurrentState
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentState"
+    put:
+      summary: Update branch current state
+      operationId: updateBranchCurrentState
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateCurrentStateInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentState"
+
+  /api/v1/branches/{branchId}/snapshots:
+    post:
+      summary: Create a main snapshot
+      operationId: createMainSnapshot
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSnapshotInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+
+  /api/v1/branches/{branchId}/releases:
+    post:
+      summary: Create a release
+      operationId: createRelease
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateReleaseInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+    get:
+      summary: List releases for a branch
+      operationId: listReleases
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Snapshot"
+
+  /api/v1/releases/{releaseId}:
+    get:
+      summary: Get a release
+      operationId: getRelease
+      parameters:
+        - $ref: "#/components/parameters/ReleaseId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Snapshot"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/branches/{branchId}/current/graph:
+    get:
+      summary: Get release graph for branch current state
+      operationId: getBranchCurrentGraph
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/MaxDepth"
+        - $ref: "#/components/parameters/MaxNodes"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseGraph"
+        "502":
+          $ref: "#/components/responses/DTUnavailable"
+
+  /api/v1/releases/{releaseId}/graph:
+    get:
+      summary: Get release graph for a release
+      operationId: getReleaseGraph
+      parameters:
+        - $ref: "#/components/parameters/ReleaseId"
+        - $ref: "#/components/parameters/MaxDepth"
+        - $ref: "#/components/parameters/MaxNodes"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReleaseGraph"
+        "502":
+          $ref: "#/components/responses/DTUnavailable"
+
+components:
+  parameters:
+    ProductId:
+      name: productId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    BranchId:
+      name: branchId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ReleaseId:
+      name: releaseId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 100
+    Offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+    MaxDepth:
+      name: maxDepth
+      in: query
+      schema:
+        type: integer
+        default: 10
+    MaxNodes:
+      name: maxNodes
+      in: query
+      schema:
+        type: integer
+        default: 1000
+
+  schemas:
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateProductInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        description:
+          type: string
+
+    UpdateProductInput:
+      type: object
+      properties:
+        displayName:
+          type: string
+        description:
+          type: string
+
+    BranchLine:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        productId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [MAIN, RELEASE]
+        name:
+          type: string
+        displayName:
+          type: string
+        sourceBranchLineId:
+          type: string
+          format: uuid
+        forkedFromSnapshotId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [active, maintenance, security_only, end_of_support, closed]
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        closedAt:
+          type: string
+          format: date-time
+
+    CreateReleaseLineInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        displayName:
+          type: string
+        forkedFromSnapshotId:
+          type: string
+          format: uuid
+
+    UpdateBranchInput:
+      type: object
+      properties:
+        displayName:
+          type: string
+        status:
+          type: string
+          enum: [active, maintenance, security_only, end_of_support, closed]
+
+    CurrentState:
+      type: object
+      properties:
+        branchLineId:
+          type: string
+          format: uuid
+        rootDtProjectUuid:
+          type: string
+          format: uuid
+        rootBomSerialNumber:
+          type: string
+        rootBomVersion:
+          type: integer
+        rootBomSha256:
+          type: string
+        sourceRevision:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+
+    UpdateCurrentStateInput:
+      type: object
+      properties:
+        rootDtProjectUuid:
+          type: string
+          format: uuid
+        rootBomSerialNumber:
+          type: string
+        rootBomVersion:
+          type: integer
+        rootBomSha256:
+          type: string
+        sourceRevision:
+          type: string
+
+    Snapshot:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        branchLineId:
+          type: string
+          format: uuid
+        snapshotType:
+          type: string
+          enum: [MAIN_SNAPSHOT, RELEASE]
+        version:
+          type: string
+        status:
+          type: string
+          enum: [draft, testing, approved, released, deprecated, end_of_support]
+        rootDtProjectUuid:
+          type: string
+          format: uuid
+        rootBomSerialNumber:
+          type: string
+        rootBomVersion:
+          type: integer
+        rootBomSha256:
+          type: string
+        sourceRevision:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        releasedAt:
+          type: string
+          format: date-time
+
+    CreateSnapshotInput:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: string
+
+    CreateReleaseInput:
+      type: object
+      required: [version]
+      properties:
+        version:
+          type: string
+
+    ReleaseGraph:
+      type: object
+      properties:
+        rootNodeId:
+          type: string
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/GraphEdge"
+        metadata:
+          $ref: "#/components/schemas/GraphMetadata"
+
+    GraphNode:
+      type: object
+      properties:
+        id:
+          type: string
+        projectUUID:
+          type: string
+        projectName:
+          type: string
+        projectVersion:
+          type: string
+        bomSerialNumber:
+          type: string
+        bomVersion:
+          type: integer
+        resolutionStatus:
+          type: string
+          enum: [resolved, missing_project, missing_bom, missing_bom_ref, invalid]
+
+    GraphEdge:
+      type: object
+      properties:
+        sourceNodeId:
+          type: string
+        targetNodeId:
+          type: string
+        bomRef:
+          type: string
+        resolutionStatus:
+          type: string
+          enum: [resolved, missing_project, missing_bom, missing_bom_ref, invalid]
+
+    GraphMetadata:
+      type: object
+      properties:
+        totalNodes:
+          type: integer
+        totalEdges:
+          type: integer
+        maxDepthReached:
+          type: boolean
+        maxNodesReached:
+          type: boolean
+        unresolvedLinks:
+          type: integer
+        cyclesDetected:
+          type: integer
+
+    APIError:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        details:
+          type: object
+        requestId:
+          type: string
+
+  responses:
+    BadRequest:
+      description: Bad Request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    NotFound:
+      description: Not Found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
+    DTUnavailable:
+      description: Dependency-Track Unavailable
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/APIError"
