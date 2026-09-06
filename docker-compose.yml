@@ -8,11 +8,12 @@ services:
     environment:
       - RC_DATABASE_DRIVER=sqlite
       - RC_DATABASE_DSN=/data/release-catalog.db
-      - RC_DT_BASE_URL=http://host.docker.internal:8081
-      - RC_DT_API_KEY=${DT_API_KEY:-}
-      - RC_DT_STUB_MODE=true
+      - RC_DT_BASE_URL=http://192.168.25.27:8082
+      - RC_DT_API_KEY=odt_cy2aVVvC_LW82nu6qoQjPOrqxSom7AzoK6FZXtc9c
+      - RC_DT_STUB_MODE=false
       - RC_SERVER_PORT=8080
       - RC_LOG_LEVEL=info
+      - RC_CORS_ALLOW_ORIGINS=http://localhost:3000
     volumes:
       - rc-data:/data
 

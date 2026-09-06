@@ -1,0 +1,40 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:a1b2c3d4-e5f6-4789-a012-3456789abcde",
+  "version": 1,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "Test-APP",
+      "version": "1.0",
+      "bom-ref": "test-app"
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "name": "LegacyTimeseriesLogger",
+      "version": "gpcsplc1.0.5-20260819-055819",
+      "bom-ref": "legacy-timeseries-logger",
+      "externalReferences": [
+        {
+          "type": "bom",
+          "url": "urn:cdx:e5007129-0cf4-42ed-bea0-572ed3fc422e/1"
+        }
+      ]
+    },
+    {
+      "type": "application",
+      "name": "LegacyProcessLogger",
+      "version": "gpcsplc1.0.4-20260819-052548",
+      "bom-ref": "legacy-process-logger",
+      "externalReferences": [
+        {
+          "type": "bom",
+          "url": "urn:cdx:649bd603-aa4c-47fa-8e6a-e087c31d86ca/1"
+        }
+      ]
+    }
+  ]
+}

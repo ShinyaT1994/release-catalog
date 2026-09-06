@@ -1,0 +1,22 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:f55ac304-7af7-42a9-b745-cefb3d509841",
+  "version": 2,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "NestedBOM",
+      "version": "0.9.0",
+      "bom-ref": "nested-bom"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "nested-lib",
+      "version": "0.1.0",
+      "bom-ref": "pkg:example/nested-lib@0.1.0"
+    }
+  ]
+}

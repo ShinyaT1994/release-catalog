@@ -110,3 +110,28 @@ func TestResolveGraph_SharedDependency(t *testing.T) {
 	}
 	assert.Equal(t, 1, commonCount)
 }
+
+func TestResolveGraph_TopBOMToSubBOM(t *testing.T) {
+	stub := dtclient.NewStubClient()
+	resolver := graph.NewResolver(stub, graph.DefaultOptions())
+	g, err := resolver.Resolve(context.Background(), "00000000-0000-0000-0000-0000000000a1")
+
+	require.NoError(t, err)
+	assert.Equal(t, 3, g.Metadata.TotalNodes)
+	assert.Equal(t, 2, g.Metadata.TotalEdges)
+	assert.Equal(t, 0, g.Metadata.UnresolvedLinks)
+
+	byName := map[string]graph.Node{}
+	for _, n := range g.Nodes {
+		byName[n.ProjectName] = n
+	}
+	require.Contains(t, byName, "TopBOM")
+	require.Contains(t, byName, "SubBOM")
+	require.Contains(t, byName, "NestedBOM")
+	assert.Equal(t, "1.0.0", byName["TopBOM"].ProjectVersion)
+	assert.Equal(t, 3, byName["TopBOM"].BOMVersion)
+	assert.Equal(t, "2.1.0", byName["SubBOM"].ProjectVersion)
+	assert.Equal(t, 6, byName["SubBOM"].BOMVersion)
+	assert.Equal(t, "0.9.0", byName["NestedBOM"].ProjectVersion)
+	assert.Equal(t, 2, byName["NestedBOM"].BOMVersion)
+}

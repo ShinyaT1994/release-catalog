@@ -1,0 +1,28 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:673f7d7f-ec05-4289-a3f6-f014e87e3426",
+  "version": 3,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "TopBOM",
+      "version": "1.0.0",
+      "bom-ref": "top-bom"
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "name": "SubBOM",
+      "version": "2.1.0",
+      "bom-ref": "sub-bom-ref",
+      "externalReferences": [
+        {
+          "type": "bom",
+          "url": "urn:cdx:b118327a-dc0e-42ff-9e43-2bb7603bf2b9/5"
+        }
+      ]
+    }
+  ]
+}

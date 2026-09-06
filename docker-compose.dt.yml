@@ -3,7 +3,7 @@
 # Use: docker compose -f docker-compose.dt.yml up -d
 services:
   dependency-track-api:
-    image: dependencytrack/apiserver:5.0
+    image: ghcr.io/dependencytrack/apiserver:5.0.4
     ports:
       - "8081:8080"
     environment:
@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
 
   dependency-track-frontend:
-    image: dependencytrack/frontend:5.0
+    image: ghcr.io/dependencytrack/frontend:5.0.4
     ports:
       - "8082:8080"
     environment:
@@ -26,18 +26,18 @@ services:
     restart: unless-stopped
 
   dt-postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
-      POSTGRES_DB: dtrack
-      POSTGRES_USER: dtrack
-      POSTGRES_PASSWORD: dtrack
-    volumes:
-      - dt-pgdata:/var/lib/postgresql/data
+      POSTGRES_DB: "dtrack"
+      POSTGRES_USER: "dtrack"
+      POSTGRES_PASSWORD: "dtrack"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U dtrack"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
-      timeout: 5s
-      retries: 5
+      timeout: 3s
+      retries: 3
+    volumes:
+      - dt-pgdata:/var/lib/postgresql
     restart: unless-stopped
 
 volumes:

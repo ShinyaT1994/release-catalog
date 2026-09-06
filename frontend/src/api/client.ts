@@ -1,4 +1,4 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {
@@ -94,6 +94,12 @@ export interface ReleaseGraph {
 }
 
 // --- API Functions ---
+export interface DTProject {
+  uuid: string;
+  name: string;
+  version: string;
+}
+
 export const api = {
   // Products
   listProducts: () => request<Product[]>("/api/v1/products"),
@@ -128,4 +134,8 @@ export const api = {
     request<ReleaseGraph>(`/api/v1/branches/${branchId}/current/graph?maxDepth=${maxDepth}&maxNodes=${maxNodes}`),
   getReleaseGraph: (releaseId: string, maxDepth = 10, maxNodes = 1000) =>
     request<ReleaseGraph>(`/api/v1/releases/${releaseId}/graph?maxDepth=${maxDepth}&maxNodes=${maxNodes}`),
+
+  // DT Projects
+  searchDTProjects: (name?: string) =>
+    request<DTProject[]>(name ? `/api/v1/dt/projects?name=${encodeURIComponent(name)}` : "/api/v1/dt/projects"),
 };

@@ -6,12 +6,12 @@ interface Props {
 }
 
 export default function GraphView({ graph }: Props) {
-  const nodeMap = new Map(graph.nodes.map(n => [n.id, n]));
+  const nodeMap = new Map((graph.nodes || []).map(n => [n.id, n]));
   const rootNode = nodeMap.get(graph.rootNodeId);
 
   // Build adjacency list
   const children = new Map<string, { nodeId: string; bomRef?: string }[]>();
-  for (const edge of graph.edges) {
+  for (const edge of graph.edges || []) {
     if (!children.has(edge.sourceNodeId)) children.set(edge.sourceNodeId, []);
     children.get(edge.sourceNodeId)!.push({ nodeId: edge.targetNodeId, bomRef: edge.bomRef });
   }

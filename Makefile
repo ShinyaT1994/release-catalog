@@ -41,3 +41,9 @@ dt-up:
 
 dt-down:
 	docker compose -f docker-compose.dt.yml down
+
+# Seed TopBOM -> SubBOM test data (requires DT_API_KEY)
+seed-top-sub:
+	DT_BASE_URL=$${DT_BASE_URL:-http://localhost:8082} \
+	RC_BASE_URL=$${RC_BASE_URL:-http://localhost:8080} \
+	./scripts/seed-top-sub-bom.sh

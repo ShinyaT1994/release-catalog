@@ -1,11 +1,14 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "react-router-dom";
 import { api } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
 import GraphView from "../components/GraphView";
+import DTProjectSelector from "../components/DTProjectSelector";
 
 export default function BranchDetail() {
   const { branchId } = useParams<{ branchId: string }>();
+  const [showProjectSelector, setShowProjectSelector] = useState(false);
   const { data: branch, isLoading } = useQuery({ queryKey: ["branch", branchId], queryFn: () => api.getBranch(branchId!) });
   const { data: currentState } = useQuery({ queryKey: ["currentState", branchId], queryFn: () => api.getCurrentState(branchId!) });
   const { data: releases } = useQuery({ queryKey: ["releases", branchId], queryFn: () => api.listReleases(branchId!) });
@@ -41,7 +44,12 @@ export default function BranchDetail() {
 
       {/* Current State */}
       <section style={{ marginBottom: 32 }}>
-        <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Current State</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Current State</h2>
+          <button onClick={() => setShowProjectSelector(true)} style={editBtnStyle}>
+            {currentState?.rootDtProjectUuid ? "Change Root Project" : "Set Root Project"}
+          </button>
+        </div>
         <div style={cardStyle}>
           {currentState?.rootDtProjectUuid ? (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
@@ -53,13 +61,21 @@ export default function BranchDetail() {
               <div><strong>Updated:</strong> {new Date(currentState.updatedAt).toLocaleString()}</div>
             </div>
           ) : (
-            <p style={{ color: "#6b7280" }}>No root project configured.</p>
+            <p style={{ color: "#6b7280" }}>No root project configured. Click "Set Root Project" to select a Dependency-Track project.</p>
           )}
         </div>
       </section>
 
+      {showProjectSelector && branchId && (
+        <DTProjectSelector
+          branchId={branchId}
+          currentUuid={currentState?.rootDtProjectUuid}
+          onClose={() => setShowProjectSelector(false)}
+        />
+      )}
+
       {/* Release Graph */}
-      {graph && graph.nodes.length > 0 && (
+      {graph && graph.nodes && graph.nodes.length > 0 && (
         <section style={{ marginBottom: 32 }}>
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Release Graph</h2>
           <GraphView graph={graph} />
@@ -112,3 +128,8 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 }
 
 const cardStyle: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
+
+const editBtnStyle: React.CSSProperties = {
+  padding: "6px 12px", background: "#1a56db", color: "#fff", border: "none",
+  borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600,
+};

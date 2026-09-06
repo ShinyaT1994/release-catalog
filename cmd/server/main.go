@@ -12,6 +12,7 @@ import (
 
 	"github.com/ShinyaT1994/release-catalog/internal/branch"
 	"github.com/ShinyaT1994/release-catalog/internal/dtclient"
+	"github.com/ShinyaT1994/release-catalog/internal/dtproxy"
 	"github.com/ShinyaT1994/release-catalog/internal/graph"
 	"github.com/ShinyaT1994/release-catalog/internal/product"
 	"github.com/ShinyaT1994/release-catalog/internal/release"
@@ -75,6 +76,7 @@ func main() {
 	e.HideBanner = true
 	e.Use(middleware.RequestID())
 	e.Use(middleware.Logger())
+	e.Use(middleware.CORS(cfg.CORSAllowOrigins))
 	e.Use(middleware.AuthPlaceholder())
 
 	api := e.Group("/api/v1")
@@ -84,6 +86,7 @@ func main() {
 	branch.NewHandler(branchUC).RegisterRoutes(api)
 	release.NewHandler(releaseUC).RegisterRoutes(api)
 	graph.NewHandler(graphUC).RegisterRoutes(api)
+	dtproxy.NewHandler(dt).RegisterRoutes(api)
 
 	// Health
 	e.GET("/health", func(c echo.Context) error {

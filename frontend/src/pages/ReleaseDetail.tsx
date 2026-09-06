@@ -41,7 +41,7 @@ export default function ReleaseDetail() {
         <InfoCard label="Source Revision" value={release.sourceRevision || "—"} />
       </div>
 
-      {graph && graph.nodes.length > 0 && (
+      {graph && graph.nodes && graph.nodes.length > 0 && (
         <section>
           <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Release Graph</h2>
           <GraphView graph={graph} />

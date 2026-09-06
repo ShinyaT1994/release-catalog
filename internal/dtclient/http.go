@@ -58,9 +58,18 @@ func (c *HTTPClient) ProjectExists(ctx context.Context, uuid string) (bool, erro
 }
 
 func (c *HTTPClient) GetBOM(ctx context.Context, projectUUID string) (*CycloneDXBOM, error) {
-	resp, err := c.doGet(ctx, fmt.Sprintf("/api/v1/bom/cyclonedx/project/%s?format=json", projectUUID))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+fmt.Sprintf("/api/v1/bom/cyclonedx/project/%s?format=json", projectUUID), nil)
 	if err != nil {
 		return nil, err
+	}
+	req.Header.Set("Accept", "application/vnd.cyclonedx+json, application/json")
+	if c.apiKey != "" {
+		req.Header.Set("X-Api-Key", c.apiKey)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, apperror.New(apperror.CodeDTUnavailable, fmt.Sprintf("failed to connect to Dependency-Track: %v", err))
 	}
 	defer resp.Body.Close()
 
@@ -68,7 +77,7 @@ func (c *HTTPClient) GetBOM(ctx context.Context, projectUUID string) (*CycloneDX
 		return nil, apperror.New(apperror.CodeRootProjectNotFound, fmt.Sprintf("BOM not found for project %s", projectUUID))
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, apperror.New(apperror.CodeDTUnavailable, fmt.Sprintf("DT returned status %d", resp.StatusCode))
+		return nil, apperror.New(apperror.CodeDTUnavailable, fmt.Sprintf("DT returned status %d for BOM request", resp.StatusCode))
 	}
 
 	var bom CycloneDXBOM
@@ -94,6 +103,42 @@ func (c *HTTPClient) GetVulnerabilities(ctx context.Context, projectUUID string)
 		return nil, err
 	}
 	return vulns, nil
+}
+
+func (c *HTTPClient) ListProjects(ctx context.Context) ([]*Project, error) {
+	resp, err := c.doGet(ctx, "/api/v1/project?limit=100&sortName=name&sortOrder=asc")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, apperror.New(apperror.CodeDTUnavailable, fmt.Sprintf("DT returned status %d", resp.StatusCode))
+	}
+
+	var projects []*Project
+	if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+		return nil, err
+	}
+	return projects, nil
+}
+
+func (c *HTTPClient) SearchProjects(ctx context.Context, name string) ([]*Project, error) {
+	resp, err := c.doGet(ctx, fmt.Sprintf("/api/v1/project?name=%s&limit=50", name))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, apperror.New(apperror.CodeDTUnavailable, fmt.Sprintf("DT returned status %d", resp.StatusCode))
+	}
+
+	var projects []*Project
+	if err := json.NewDecoder(resp.Body).Decode(&projects); err != nil {
+		return nil, err
+	}
+	return projects, nil
 }
 
 func (c *HTTPClient) doGet(ctx context.Context, path string) (*http.Response, error) {

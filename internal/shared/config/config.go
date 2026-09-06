@@ -4,32 +4,35 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 // Config holds all application configuration
 type Config struct {
-	DatabaseDriver string
-	DatabaseDSN    string
-	ServerPort     int
-	DTBaseURL      string
-	DTAPIKey       string
-	DTStubMode     bool
-	DTTimeout      time.Duration
-	LogLevelStr    string
+	DatabaseDriver   string
+	DatabaseDSN      string
+	ServerPort       int
+	DTBaseURL        string
+	DTAPIKey         string
+	DTStubMode       bool
+	DTTimeout        time.Duration
+	LogLevelStr      string
+	CORSAllowOrigins []string
 }
 
 // Load reads configuration from environment variables
 func Load() *Config {
 	return &Config{
-		DatabaseDriver: getEnv("RC_DATABASE_DRIVER", "sqlite"),
-		DatabaseDSN:    getEnv("RC_DATABASE_DSN", "./release-catalog.db"),
-		ServerPort:     getEnvInt("RC_SERVER_PORT", 8080),
-		DTBaseURL:      getEnv("RC_DT_BASE_URL", "http://localhost:8081"),
-		DTAPIKey:       getEnv("RC_DT_API_KEY", ""),
-		DTStubMode:     getEnvBool("RC_DT_STUB_MODE", true),
-		DTTimeout:      time.Duration(getEnvInt("RC_DT_TIMEOUT_SECONDS", 30)) * time.Second,
-		LogLevelStr:    getEnv("RC_LOG_LEVEL", "info"),
+		DatabaseDriver:   getEnv("RC_DATABASE_DRIVER", "sqlite"),
+		DatabaseDSN:      getEnv("RC_DATABASE_DSN", "./release-catalog.db"),
+		ServerPort:       getEnvInt("RC_SERVER_PORT", 8080),
+		DTBaseURL:        getEnv("RC_DT_BASE_URL", "http://localhost:8081"),
+		DTAPIKey:         getEnv("RC_DT_API_KEY", ""),
+		DTStubMode:       getEnvBool("RC_DT_STUB_MODE", true),
+		DTTimeout:        time.Duration(getEnvInt("RC_DT_TIMEOUT_SECONDS", 30)) * time.Second,
+		LogLevelStr:      getEnv("RC_LOG_LEVEL", "info"),
+		CORSAllowOrigins: getEnvSlice("RC_CORS_ALLOW_ORIGINS", []string{"*"}),
 	}
 }
 
@@ -67,6 +70,22 @@ func getEnvBool(key string, defaultVal bool) bool {
 	if v := os.Getenv(key); v != "" {
 		if b, err := strconv.ParseBool(v); err == nil {
 			return b
+		}
+	}
+	return defaultVal
+}
+
+func getEnvSlice(key string, defaultVal []string) []string {
+	if v := os.Getenv(key); v != "" {
+		parts := strings.Split(v, ",")
+		result := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if trimmed := strings.TrimSpace(p); trimmed != "" {
+				result = append(result, trimmed)
+			}
+		}
+		if len(result) > 0 {
+			return result
 		}
 	}
 	return defaultVal

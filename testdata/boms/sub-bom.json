@@ -1,0 +1,34 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "serialNumber": "urn:uuid:b118327a-dc0e-42ff-9e43-2bb7603bf2b9",
+  "version": 6,
+  "metadata": {
+    "component": {
+      "type": "application",
+      "name": "SubBOM",
+      "version": "2.1.0",
+      "bom-ref": "sub-bom"
+    }
+  },
+  "components": [
+    {
+      "type": "application",
+      "name": "NestedBOM",
+      "version": "0.9.0",
+      "bom-ref": "nested-bom-ref",
+      "externalReferences": [
+        {
+          "type": "bom",
+          "url": "urn:cdx:f55ac304-7af7-42a9-b745-cefb3d509841/2"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "example-lib",
+      "version": "1.2.3",
+      "bom-ref": "pkg:example/example-lib@1.2.3"
+    }
+  ]
+}

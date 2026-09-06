@@ -8,6 +8,8 @@ type Client interface {
 	ProjectExists(ctx context.Context, uuid string) (bool, error)
 	GetBOM(ctx context.Context, projectUUID string) (*CycloneDXBOM, error)
 	GetVulnerabilities(ctx context.Context, projectUUID string) ([]*Vulnerability, error)
+	ListProjects(ctx context.Context) ([]*Project, error)
+	SearchProjects(ctx context.Context, name string) ([]*Project, error)
 }
 
 // --- DT Models ---
