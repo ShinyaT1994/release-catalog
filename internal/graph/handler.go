@@ -8,39 +8,61 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// Handler handles HTTP requests for Graph
+// Handler handles HTTP requests for graphs and timelines.
 type Handler struct {
-	uc UseCase
+	sbom    SBOMUseCase
+	lineage LineageUseCase
 }
 
-func NewHandler(uc UseCase) *Handler {
-	return &Handler{uc: uc}
+func NewHandler(sbom SBOMUseCase, lineage LineageUseCase) *Handler {
+	return &Handler{sbom: sbom, lineage: lineage}
 }
 
-// RegisterRoutes registers graph routes
+// RegisterRoutes registers graph routes.
 func (h *Handler) RegisterRoutes(g *echo.Group) {
-	g.GET("/branches/:branchId/current/graph", h.GetBranchCurrentGraph)
-	g.GET("/releases/:releaseId/graph", h.GetReleaseGraph)
+	g.GET("/versions/:versionId/projects/:role/graph", h.GetProjectGraph)
+	g.GET("/products/:productId/lineage-graph", h.GetProductLineage)
+	g.GET("/products/:productId/timeline", h.GetProductTimeline)
+	g.GET("/branches/:branchId/timeline", h.GetBranchTimeline)
 }
 
-func (h *Handler) GetBranchCurrentGraph(c echo.Context) error {
+func (h *Handler) GetProjectGraph(c echo.Context) error {
+	versionID := c.Param("versionId")
+	role := c.Param("role")
+	opts := parseOptions(c)
+	g, err := h.sbom.GetProjectGraph(c.Request().Context(), versionID, role, opts)
+	if err != nil {
+		return middleware.SendError(c, err)
+	}
+	return c.JSON(http.StatusOK, g)
+}
+
+func (h *Handler) GetProductLineage(c echo.Context) error {
+	productID := c.Param("productId")
+	axis := LineageAxis(c.QueryParam("axis"))
+	g, err := h.lineage.GetProductLineage(c.Request().Context(), productID, axis)
+	if err != nil {
+		return middleware.SendError(c, err)
+	}
+	return c.JSON(http.StatusOK, g)
+}
+
+func (h *Handler) GetProductTimeline(c echo.Context) error {
+	productID := c.Param("productId")
+	t, err := h.lineage.GetProductTimeline(c.Request().Context(), productID)
+	if err != nil {
+		return middleware.SendError(c, err)
+	}
+	return c.JSON(http.StatusOK, t)
+}
+
+func (h *Handler) GetBranchTimeline(c echo.Context) error {
 	branchID := c.Param("branchId")
-	opts := parseOptions(c)
-	g, err := h.uc.GetBranchCurrentGraph(c.Request().Context(), branchID, opts)
+	t, err := h.lineage.GetBranchTimeline(c.Request().Context(), branchID)
 	if err != nil {
 		return middleware.SendError(c, err)
 	}
-	return c.JSON(http.StatusOK, g)
-}
-
-func (h *Handler) GetReleaseGraph(c echo.Context) error {
-	releaseID := c.Param("releaseId")
-	opts := parseOptions(c)
-	g, err := h.uc.GetReleaseGraph(c.Request().Context(), releaseID, opts)
-	if err != nil {
-		return middleware.SendError(c, err)
-	}
-	return c.JSON(http.StatusOK, g)
+	return c.JSON(http.StatusOK, t)
 }
 
 func parseOptions(c echo.Context) Options {

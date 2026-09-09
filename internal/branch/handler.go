@@ -24,8 +24,6 @@ func (h *Handler) RegisterRoutes(g *echo.Group) {
 	g.GET("/branches/:branchId", h.GetByID)
 	g.POST("/products/:productId/release-lines", h.CreateReleaseLine)
 	g.PATCH("/branches/:branchId", h.Update)
-	g.GET("/branches/:branchId/current", h.GetCurrentState)
-	g.PUT("/branches/:branchId/current", h.UpdateCurrentState)
 }
 
 func (h *Handler) CreateReleaseLine(c echo.Context) error {
@@ -84,26 +82,4 @@ func (h *Handler) Update(c echo.Context) error {
 		return middleware.SendError(c, err)
 	}
 	return c.JSON(http.StatusOK, b)
-}
-
-func (h *Handler) GetCurrentState(c echo.Context) error {
-	branchID := c.Param("branchId")
-	cs, err := h.uc.GetCurrentState(c.Request().Context(), branchID)
-	if err != nil {
-		return middleware.SendError(c, err)
-	}
-	return c.JSON(http.StatusOK, cs)
-}
-
-func (h *Handler) UpdateCurrentState(c echo.Context) error {
-	branchID := c.Param("branchId")
-	var input UpdateCurrentStateInput
-	if err := c.Bind(&input); err != nil {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-	}
-	cs, err := h.uc.UpdateCurrentState(c.Request().Context(), branchID, input)
-	if err != nil {
-		return middleware.SendError(c, err)
-	}
-	return c.JSON(http.StatusOK, cs)
 }

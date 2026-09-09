@@ -15,10 +15,10 @@ import (
 	"github.com/ShinyaT1994/release-catalog/internal/dtproxy"
 	"github.com/ShinyaT1994/release-catalog/internal/graph"
 	"github.com/ShinyaT1994/release-catalog/internal/product"
-	"github.com/ShinyaT1994/release-catalog/internal/release"
 	"github.com/ShinyaT1994/release-catalog/internal/shared/config"
 	"github.com/ShinyaT1994/release-catalog/internal/shared/database"
 	"github.com/ShinyaT1994/release-catalog/internal/shared/middleware"
+	"github.com/ShinyaT1994/release-catalog/internal/version"
 	"github.com/labstack/echo/v4"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -54,22 +54,22 @@ func main() {
 	// --- Repositories (Adapters: out) ---
 	productRepo := product.NewSQLiteRepository(db)
 	branchRepo := branch.NewSQLiteRepository(db)
-	csRepo := branch.NewSQLiteCurrentStateRepository(db)
-	releaseRepo := release.NewSQLiteRepository(db)
+	versionRepo := version.NewSQLiteRepository(db)
+	lineageSource := graph.NewSQLiteLineageSource(db)
 
-	// --- Adapters for cross-feature dependencies ---
+	// --- Cross-feature adapters ---
 	productFinderAdapter := &productFinderAdapter{repo: productRepo}
-	snapshotFinderAdapter := &snapshotFinderAdapter{repo: releaseRepo}
+	versionFinderAdapter := &versionFinderAdapter{repo: versionRepo}
 	branchFinderAdapter := &branchFinderAdapter{repo: branchRepo}
-	csFinderAdapter := &csFinderAdapter{repo: csRepo}
-	graphCSFinderAdapter := &graphCSFinderAdapter{repo: csRepo, branchRepo: branchRepo}
-	graphSnapFinderAdapter := &graphSnapFinderAdapter{repo: releaseRepo}
+	versionProjectFinderAdapter := &versionProjectFinderAdapter{repo: versionRepo}
 
 	// --- UseCases ---
 	productUC := product.NewService(productRepo, branchRepo)
-	branchUC := branch.NewService(branchRepo, csRepo, productFinderAdapter, snapshotFinderAdapter)
-	releaseUC := release.NewService(releaseRepo, branchFinderAdapter, csFinderAdapter)
-	graphUC := graph.NewService(dt, graphCSFinderAdapter, graphSnapFinderAdapter)
+	versionUC := version.NewService(versionRepo, branchFinderAdapter)
+	versionCreatorAdapter := &versionCreatorAdapter{uc: versionUC}
+	branchUC := branch.NewService(branchRepo, productFinderAdapter, versionFinderAdapter, versionCreatorAdapter)
+	sbomUC := graph.NewSBOMService(dt, versionProjectFinderAdapter)
+	lineageUC := graph.NewLineageService(lineageSource)
 
 	// --- Echo setup ---
 	e := echo.New()
@@ -84,8 +84,8 @@ func main() {
 	// --- Register routes (package-by-feature) ---
 	product.NewHandler(productUC).RegisterRoutes(api)
 	branch.NewHandler(branchUC).RegisterRoutes(api)
-	release.NewHandler(releaseUC).RegisterRoutes(api)
-	graph.NewHandler(graphUC).RegisterRoutes(api)
+	version.NewHandler(versionUC).RegisterRoutes(api)
+	graph.NewHandler(sbomUC, lineageUC).RegisterRoutes(api)
 	dtproxy.NewHandler(dt).RegisterRoutes(api)
 
 	// Health
@@ -130,33 +130,28 @@ func (a *productFinderAdapter) FindByID(ctx context.Context, id string) (bool, e
 	return p != nil, nil
 }
 
-type snapshotFinderAdapter struct {
-	repo *release.SQLiteRepository
+// versionFinderAdapter lets the branch feature validate a fork-point version.
+type versionFinderAdapter struct {
+	repo *version.SQLiteRepository
 }
 
-func (a *snapshotFinderAdapter) FindByID(ctx context.Context, id string) (*branch.SnapshotInfo, error) {
-	s, err := a.repo.FindByID(ctx, id)
+func (a *versionFinderAdapter) FindByID(ctx context.Context, id string) (*branch.VersionInfo, error) {
+	v, err := a.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	if s == nil {
+	if v == nil {
 		return nil, nil
 	}
-	return &branch.SnapshotInfo{
-		ID:                s.ID,
-		RootDTProjectUUID: s.RootDTProjectUUID,
-		RootBOMSerial:     s.RootBOMSerial,
-		RootBOMVersion:    s.RootBOMVersion,
-		RootBOMSHA256:     s.RootBOMSHA256,
-		SourceRevision:    s.SourceRevision,
-	}, nil
+	return &branch.VersionInfo{ID: v.ID, BranchLineID: v.BranchLineID, VersionString: v.VersionString}, nil
 }
 
+// branchFinderAdapter lets the version feature verify branch existence/type.
 type branchFinderAdapter struct {
 	repo *branch.SQLiteRepository
 }
 
-func (a *branchFinderAdapter) FindByID(ctx context.Context, id string) (*release.BranchInfo, error) {
+func (a *branchFinderAdapter) FindByID(ctx context.Context, id string) (*version.BranchInfo, error) {
 	b, err := a.repo.FindByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -164,65 +159,44 @@ func (a *branchFinderAdapter) FindByID(ctx context.Context, id string) (*release
 	if b == nil {
 		return nil, nil
 	}
-	return &release.BranchInfo{ID: b.ID, Type: string(b.Type)}, nil
+	return &version.BranchInfo{ID: b.ID, Type: string(b.Type)}, nil
 }
 
-type csFinderAdapter struct {
-	repo *branch.SQLiteCurrentStateRepository
+// versionProjectFinderAdapter lets the SBOM graph resolve a role-tagged DT project.
+type versionProjectFinderAdapter struct {
+	repo *version.SQLiteRepository
 }
 
-func (a *csFinderAdapter) FindByBranchID(ctx context.Context, branchID string) (*release.CurrentStateInfo, error) {
-	cs, err := a.repo.FindByBranchID(ctx, branchID)
-	if err != nil {
-		return nil, err
-	}
-	if cs == nil {
-		return nil, nil
-	}
-	return &release.CurrentStateInfo{
-		RootDTProjectUUID: cs.RootDTProjectUUID,
-		RootBOMSerial:     cs.RootBOMSerial,
-		RootBOMVersion:    cs.RootBOMVersion,
-		RootBOMSHA256:     cs.RootBOMSHA256,
-		SourceRevision:    cs.SourceRevision,
-	}, nil
-}
-
-type graphCSFinderAdapter struct {
-	repo       *branch.SQLiteCurrentStateRepository
-	branchRepo *branch.SQLiteRepository
-}
-
-func (a *graphCSFinderAdapter) FindByBranchID(ctx context.Context, branchID string) (*graph.CurrentStateInfo, error) {
-	cs, err := a.repo.FindByBranchID(ctx, branchID)
-	if err != nil {
-		return nil, err
-	}
-	if cs == nil {
-		return nil, nil
-	}
-	return &graph.CurrentStateInfo{RootDTProjectUUID: cs.RootDTProjectUUID}, nil
-}
-
-func (a *graphCSFinderAdapter) BranchExists(ctx context.Context, branchID string) (bool, error) {
-	b, err := a.branchRepo.FindByID(ctx, branchID)
+func (a *versionProjectFinderAdapter) VersionExists(ctx context.Context, versionID string) (bool, error) {
+	v, err := a.repo.FindByID(ctx, versionID)
 	if err != nil {
 		return false, err
 	}
-	return b != nil, nil
+	return v != nil, nil
 }
 
-type graphSnapFinderAdapter struct {
-	repo *release.SQLiteRepository
-}
-
-func (a *graphSnapFinderAdapter) FindByID(ctx context.Context, id string) (*graph.SnapshotInfo, error) {
-	s, err := a.repo.FindByID(ctx, id)
+func (a *versionProjectFinderAdapter) FindProjectUUID(ctx context.Context, versionID, role string) (*string, error) {
+	p, err := a.repo.FindProjectByRole(ctx, versionID, version.Role(role))
 	if err != nil {
 		return nil, err
 	}
-	if s == nil {
+	if p == nil {
 		return nil, nil
 	}
-	return &graph.SnapshotInfo{RootDTProjectUUID: s.RootDTProjectUUID}, nil
+	return p.DTProjectUUID, nil
+}
+
+// versionCreatorAdapter lets the branch feature auto-create the first version on
+// a newly created release branch, delegating to the version usecase (which
+// defaults the ROOT binding from the forked main version, status "incomplete").
+type versionCreatorAdapter struct {
+	uc version.UseCase
+}
+
+func (a *versionCreatorAdapter) CreateFirstVersion(ctx context.Context, branchID string, input branch.CreateFirstVersionInput) error {
+	_, err := a.uc.Create(ctx, branchID, version.CreateInput{
+		VersionString:       input.VersionString,
+		ForkedFromVersionID: input.ForkedFromVersionID,
+	})
+	return err
 }

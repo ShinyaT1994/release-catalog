@@ -62,3 +62,5 @@ checklist.
 | [0007](0007-git-like-version-model.md) | Git-like version model replacing snapshots and current-state | Accepted |
 | [0008](0008-role-tagged-dt-projects-per-version.md) | Multiple role-tagged DT projects per version (ROOT/PROFILE/SUB) | Accepted |
 | [0009](0009-version-lineage-graph-separate-from-sbom-graph.md) | Version-lineage graph (RC-DB-only) separate from the BOM-Link SBOM graph | Accepted |
+| [0010](0010-release-branch-auto-provisions-first-version.md) | Release branch auto-provisions its first version, ROOT inherited from the forked main version | Accepted |
+| [0011](0011-lineage-graph-axis-layout.md) | Version-lineage graph layout per axis (version blocks vs same-date columns) | Accepted |

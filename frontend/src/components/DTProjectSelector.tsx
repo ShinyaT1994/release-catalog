@@ -1,43 +1,38 @@
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../api/client";
 import type { DTProject } from "../api/client";
 
 interface Props {
-  branchId: string;
+  title?: string;
   currentUuid?: string;
+  onSelect: (uuid: string) => void;
   onClose: () => void;
+  saving?: boolean;
+  error?: boolean;
 }
 
-export default function DTProjectSelector({ branchId, currentUuid, onClose }: Props) {
-  const queryClient = useQueryClient();
+// DTProjectSelector is a generic Dependency-Track project picker. It returns the
+// chosen project UUID via onSelect; the caller decides how to persist it.
+export default function DTProjectSelector({ title, currentUuid, onSelect, onClose, saving, error }: Props) {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<string | undefined>(currentUuid);
   const [manualUuid, setManualUuid] = useState("");
 
-  const { data: projects, isLoading, error } = useQuery({
+  const { data: projects, isLoading, error: loadError } = useQuery({
     queryKey: ["dtProjects", search],
     queryFn: () => api.searchDTProjects(search || undefined),
   });
 
-  const mutation = useMutation({
-    mutationFn: (uuid: string) => api.updateCurrentState(branchId, { rootDtProjectUuid: uuid }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["currentState", branchId] });
-      queryClient.invalidateQueries({ queryKey: ["graph", branchId] });
-      onClose();
-    },
-  });
-
   const handleSave = () => {
     const uuid = manualUuid.trim() || selected;
-    if (uuid) mutation.mutate(uuid);
+    if (uuid) onSelect(uuid);
   };
 
   return (
     <div style={overlayStyle} onClick={onClose}>
       <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>Set Root DT Project</h3>
+        <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>{title || "Select DT Project"}</h3>
 
         <input
           type="text"
@@ -49,7 +44,7 @@ export default function DTProjectSelector({ branchId, currentUuid, onClose }: Pr
 
         <div style={{ maxHeight: 240, overflowY: "auto", margin: "12px 0", border: "1px solid #e5e7eb", borderRadius: 6 }}>
           {isLoading && <p style={{ padding: 12, color: "#6b7280" }}>Loading...</p>}
-          {error && <p style={{ padding: 12, color: "#dc2626" }}>Failed to load DT projects. Check Dependency-Track connection.</p>}
+          {loadError && <p style={{ padding: 12, color: "#dc2626" }}>Failed to load DT projects. Check Dependency-Track connection.</p>}
           {projects && projects.length === 0 && <p style={{ padding: 12, color: "#6b7280" }}>No projects found.</p>}
           {projects?.map((p: DTProject) => (
             <div
@@ -79,7 +74,7 @@ export default function DTProjectSelector({ branchId, currentUuid, onClose }: Pr
           />
         </div>
 
-        {mutation.isError && (
+        {error && (
           <p style={{ color: "#dc2626", fontSize: 13, marginBottom: 12 }}>Failed to save. Please try again.</p>
         )}
 
@@ -87,10 +82,10 @@ export default function DTProjectSelector({ branchId, currentUuid, onClose }: Pr
           <button onClick={onClose} style={btnSecondary}>Cancel</button>
           <button
             onClick={handleSave}
-            disabled={(!selected && !manualUuid.trim()) || mutation.isPending}
-            style={{ ...btnPrimary, opacity: (!selected && !manualUuid.trim()) || mutation.isPending ? 0.5 : 1 }}
+            disabled={(!selected && !manualUuid.trim()) || saving}
+            style={{ ...btnPrimary, opacity: (!selected && !manualUuid.trim()) || saving ? 0.5 : 1 }}
           >
-            {mutation.isPending ? "Saving..." : "Save"}
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>

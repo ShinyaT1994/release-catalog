@@ -21,7 +21,7 @@ func HTTPStatusForCode(code apperror.Code) int {
 	case apperror.CodeInvalidRequest:
 		return http.StatusBadRequest
 	case apperror.CodeProductNotFound, apperror.CodeBranchNotFound,
-		apperror.CodeReleaseNotFound, apperror.CodeRootProjectNotFound:
+		apperror.CodeReleaseNotFound, apperror.CodeVersionNotFound, apperror.CodeRootProjectNotFound:
 		return http.StatusNotFound
 	case apperror.CodeRootBOMChanged, apperror.CodeConflict:
 		return http.StatusConflict

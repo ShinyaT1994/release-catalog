@@ -1,21 +1,27 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useParams, Link } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import StatusBadge from "../components/StatusBadge";
-import GraphView from "../components/GraphView";
-import DTProjectSelector from "../components/DTProjectSelector";
+import TimelineView from "../components/TimelineView";
 
 export default function BranchDetail() {
   const { branchId } = useParams<{ branchId: string }>();
-  const [showProjectSelector, setShowProjectSelector] = useState(false);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
   const { data: branch, isLoading } = useQuery({ queryKey: ["branch", branchId], queryFn: () => api.getBranch(branchId!) });
-  const { data: currentState } = useQuery({ queryKey: ["currentState", branchId], queryFn: () => api.getCurrentState(branchId!) });
-  const { data: releases } = useQuery({ queryKey: ["releases", branchId], queryFn: () => api.listReleases(branchId!) });
-  const { data: graph } = useQuery({
-    queryKey: ["graph", branchId],
-    queryFn: () => api.getBranchGraph(branchId!),
-    enabled: !!currentState?.rootDtProjectUuid,
+  const { data: versions } = useQuery({ queryKey: ["versions", branchId], queryFn: () => api.listVersions(branchId!) });
+  const { data: timeline } = useQuery({ queryKey: ["branchTimeline", branchId], queryFn: () => api.getBranchTimeline(branchId!) });
+
+  const [newVersionString, setNewVersionString] = useState("");
+  const createVersion = useMutation({
+    mutationFn: () => api.createVersion(branchId!, { versionString: newVersionString }),
+    onSuccess: (v) => {
+      queryClient.invalidateQueries({ queryKey: ["versions", branchId] });
+      queryClient.invalidateQueries({ queryKey: ["branchTimeline", branchId] });
+      setNewVersionString("");
+      navigate(`/versions/${v.id}`);
+    },
   });
 
   if (isLoading || !branch) return <p>Loading...</p>;
@@ -42,78 +48,60 @@ export default function BranchDetail() {
         <InfoCard label="Created" value={new Date(branch.createdAt).toLocaleDateString()} />
       </div>
 
-      {/* Current State */}
-      <section style={{ marginBottom: 32 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Current State</h2>
-          <button onClick={() => setShowProjectSelector(true)} style={editBtnStyle}>
-            {currentState?.rootDtProjectUuid ? "Change Root Project" : "Set Root Project"}
-          </button>
-        </div>
-        <div style={cardStyle}>
-          {currentState?.rootDtProjectUuid ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 14 }}>
-              <div><strong>Root DT Project:</strong> <code>{currentState.rootDtProjectUuid}</code></div>
-              <div><strong>BOM Serial:</strong> <code>{currentState.rootBomSerialNumber || "—"}</code></div>
-              <div><strong>BOM Version:</strong> {currentState.rootBomVersion ?? "—"}</div>
-              <div><strong>SHA-256:</strong> <code style={{ fontSize: 11 }}>{currentState.rootBomSha256 ? currentState.rootBomSha256.slice(0, 16) + "..." : "—"}</code></div>
-              <div><strong>Source Revision:</strong> <code>{currentState.sourceRevision || "—"}</code></div>
-              <div><strong>Updated:</strong> {new Date(currentState.updatedAt).toLocaleString()}</div>
-            </div>
-          ) : (
-            <p style={{ color: "#6b7280" }}>No root project configured. Click "Set Root Project" to select a Dependency-Track project.</p>
-          )}
-        </div>
-      </section>
-
-      {showProjectSelector && branchId && (
-        <DTProjectSelector
-          branchId={branchId}
-          currentUuid={currentState?.rootDtProjectUuid}
-          onClose={() => setShowProjectSelector(false)}
-        />
-      )}
-
-      {/* Release Graph */}
-      {graph && graph.nodes && graph.nodes.length > 0 && (
+      {/* Timeline */}
+      {timeline && timeline.entries.length > 0 && (
         <section style={{ marginBottom: 32 }}>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Release Graph</h2>
-          <GraphView graph={graph} />
+          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Timeline</h2>
+          <TimelineView entries={timeline.entries} />
         </section>
       )}
 
-      {/* Release History */}
-      {branch.type === "RELEASE" && (
-        <section>
-          <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>Release History</h2>
-          {(!releases || releases.length === 0) ? (
-            <p style={{ color: "#6b7280" }}>No releases yet.</p>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
-              <thead>
-                <tr style={{ borderBottom: "2px solid #e5e7eb", textAlign: "left" }}>
-                  <th style={{ padding: 8 }}>Version</th>
-                  <th style={{ padding: 8 }}>Status</th>
-                  <th style={{ padding: 8 }}>Released</th>
-                  <th style={{ padding: 8 }}>Root Project</th>
+      {/* Versions */}
+      <section>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 18, fontWeight: 600 }}>Versions</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              placeholder="Version string (e.g. 1.0)"
+              value={newVersionString}
+              onChange={e => setNewVersionString(e.target.value)}
+              style={inputStyle}
+            />
+            <button onClick={() => createVersion.mutate()} style={btnStyle} disabled={!newVersionString || createVersion.isPending}>
+              + New Version
+            </button>
+          </div>
+        </div>
+
+        {(!versions || versions.length === 0) ? (
+          <p style={{ color: "#6b7280" }}>No versions yet. Preset one with a version string.</p>
+        ) : (
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 14 }}>
+            <thead>
+              <tr style={{ borderBottom: "2px solid #e5e7eb", textAlign: "left" }}>
+                <th style={{ padding: 8 }}>Version</th>
+                <th style={{ padding: 8 }}>Status</th>
+                <th style={{ padding: 8 }}>Release Date</th>
+                <th style={{ padding: 8 }}>Customer</th>
+                <th style={{ padding: 8 }}>Projects</th>
+              </tr>
+            </thead>
+            <tbody>
+              {versions.map(v => (
+                <tr key={v.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
+                  <td style={{ padding: 8 }}>
+                    <Link to={`/versions/${v.id}`} style={{ color: "#1a56db", fontWeight: 600 }}>{v.versionString}</Link>
+                  </td>
+                  <td style={{ padding: 8 }}><StatusBadge status={v.status} /></td>
+                  <td style={{ padding: 8 }}>{v.releaseDate ? new Date(v.releaseDate).toLocaleDateString() : "—"}</td>
+                  <td style={{ padding: 8 }}>{v.customer || "—"}</td>
+                  <td style={{ padding: 8 }}>{v.projects?.length ?? 0}</td>
                 </tr>
-              </thead>
-              <tbody>
-                {releases.map(r => (
-                  <tr key={r.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: 8 }}>
-                      <Link to={`/releases/${r.id}`} style={{ color: "#1a56db", fontWeight: 600 }}>{r.version}</Link>
-                    </td>
-                    <td style={{ padding: 8 }}><StatusBadge status={r.status} /></td>
-                    <td style={{ padding: 8 }}>{r.releasedAt ? new Date(r.releasedAt).toLocaleDateString() : "—"}</td>
-                    <td style={{ padding: 8 }}><code style={{ fontSize: 11 }}>{r.rootDtProjectUuid?.slice(0, 8) || "—"}</code></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      )}
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </div>
   );
 }
@@ -128,8 +116,5 @@ function InfoCard({ label, value }: { label: string; value: string }) {
 }
 
 const cardStyle: React.CSSProperties = { background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, padding: 12 };
-
-const editBtnStyle: React.CSSProperties = {
-  padding: "6px 12px", background: "#1a56db", color: "#fff", border: "none",
-  borderRadius: 6, cursor: "pointer", fontSize: 13, fontWeight: 600,
-};
+const btnStyle: React.CSSProperties = { background: "#1a56db", color: "#fff", border: "none", borderRadius: 6, padding: "8px 16px", cursor: "pointer", fontWeight: 600, fontSize: 14 };
+const inputStyle: React.CSSProperties = { border: "1px solid #d1d5db", borderRadius: 6, padding: "8px 12px", fontSize: 14 };

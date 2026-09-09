@@ -110,17 +110,57 @@ export interface paths {
         patch: operations["updateBranch"];
         trace?: never;
     };
-    "/api/v1/branches/{branchId}/current": {
+    "/api/v1/branches/{branchId}/versions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get branch current state */
-        get: operations["getBranchCurrentState"];
-        /** Update branch current state */
-        put: operations["updateBranchCurrentState"];
+        /** List versions on a branch (ordered by release datetime) */
+        get: operations["listVersions"];
+        put?: never;
+        /**
+         * Create (preset) a version
+         * @description Presets a git-like version on the branch line. Only `versionString` is
+         *     required; DT projects and release metadata are filled in later.
+         */
+        post: operations["createVersion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/versions/{versionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a version (incl. role-tagged projects) */
+        get: operations["getVersion"];
+        put?: never;
+        post?: never;
+        /** Delete a version */
+        delete: operations["deleteVersion"];
+        options?: never;
+        head?: never;
+        /** Edit any field (soft immutability) */
+        patch: operations["updateVersion"];
+        trace?: never;
+    };
+    "/api/v1/versions/{versionId}/projects/root": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Set or replace the single ROOT DT project binding */
+        put: operations["setVersionRoot"];
         post?: never;
         delete?: never;
         options?: never;
@@ -128,7 +168,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/branches/{branchId}/snapshots": {
+    "/api/v1/versions/{versionId}/projects": {
         parameters: {
             query?: never;
             header?: never;
@@ -137,41 +177,40 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create a main snapshot */
-        post: operations["createMainSnapshot"];
+        /** Add a PROFILE or SUB DT project binding */
+        post: operations["addVersionProject"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/branches/{branchId}/releases": {
+    "/api/v1/versions/{versionId}/projects/{bindingId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List releases for a branch */
-        get: operations["listReleases"];
+        get?: never;
         put?: never;
-        /** Create a release */
-        post: operations["createRelease"];
-        delete?: never;
+        post?: never;
+        /** Remove a DT project binding */
+        delete: operations["removeVersionProject"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/v1/releases/{releaseId}": {
+    "/api/v1/versions/{versionId}/projects/{role}/graph": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get a release */
-        get: operations["getRelease"];
+        /** BOM-Link SBOM graph for one role-tagged project */
+        get: operations["getProjectGraph"];
         put?: never;
         post?: never;
         delete?: never;
@@ -180,15 +219,19 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/branches/{branchId}/current/graph": {
+    "/api/v1/products/{productId}/lineage-graph": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get release graph for branch current state */
-        get: operations["getBranchCurrentGraph"];
+        /**
+         * Version-lineage graph (RC DB only)
+         * @description Nodes are versions; edges are parent/fork lineage. Built purely from the
+         *     release catalog database — never calls Dependency-Track and cannot 502.
+         */
+        get: operations["getProductLineage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -197,15 +240,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/releases/{releaseId}/graph": {
+    "/api/v1/products/{productId}/timeline": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get release graph for a release */
-        get: operations["getReleaseGraph"];
+        /** Product-scope release timeline (all branches) */
+        get: operations["getProductTimeline"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/branches/{branchId}/timeline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Branch-scope release timeline */
+        get: operations["getBranchTimeline"];
         put?: never;
         post?: never;
         delete?: never;
@@ -250,7 +310,7 @@ export interface components {
             /** Format: uuid */
             sourceBranchLineId?: string;
             /** Format: uuid */
-            forkedFromSnapshotId?: string;
+            forkedFromVersionId?: string;
             /** @enum {string} */
             status?: "active" | "maintenance" | "security_only" | "end_of_support" | "closed";
             /** Format: date-time */
@@ -263,60 +323,96 @@ export interface components {
         CreateReleaseLineInput: {
             name: string;
             displayName?: string;
-            /** Format: uuid */
-            forkedFromSnapshotId?: string;
+            /**
+             * Format: uuid
+             * @description A main-branch version to fork the release line from.
+             */
+            forkedFromVersionId?: string;
         };
         UpdateBranchInput: {
             displayName?: string;
             /** @enum {string} */
             status?: "active" | "maintenance" | "security_only" | "end_of_support" | "closed";
         };
-        CurrentState: {
-            /** Format: uuid */
-            branchLineId?: string;
-            /** Format: uuid */
-            rootDtProjectUuid?: string;
-            rootBomSerialNumber?: string;
-            rootBomVersion?: number;
-            rootBomSha256?: string;
-            sourceRevision?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
-        UpdateCurrentStateInput: {
-            /** Format: uuid */
-            rootDtProjectUuid?: string;
-            rootBomSerialNumber?: string;
-            rootBomVersion?: number;
-            rootBomSha256?: string;
-            sourceRevision?: string;
-        };
-        Snapshot: {
+        Version: {
             /** Format: uuid */
             id?: string;
             /** Format: uuid */
             branchLineId?: string;
+            versionString?: string;
             /** @enum {string} */
-            snapshotType?: "MAIN_SNAPSHOT" | "RELEASE";
-            version?: string;
-            /** @enum {string} */
-            status?: "draft" | "testing" | "approved" | "released" | "deprecated" | "end_of_support";
+            status?: "incomplete" | "finalized";
             /** Format: uuid */
-            rootDtProjectUuid?: string;
-            rootBomSerialNumber?: string;
-            rootBomVersion?: number;
-            rootBomSha256?: string;
-            sourceRevision?: string;
+            parentVersionId?: string;
+            /** Format: uuid */
+            forkedFromVersionId?: string;
+            location?: string;
+            customer?: string;
+            /** Format: date-time */
+            releaseDate?: string;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
-            releasedAt?: string;
+            updatedAt?: string;
+            projects?: components["schemas"]["VersionDTProject"][];
         };
-        CreateSnapshotInput: {
-            version: string;
+        VersionDTProject: {
+            id?: number;
+            /** Format: uuid */
+            versionId?: string;
+            /** @enum {string} */
+            role?: "ROOT" | "PROFILE" | "SUB";
+            /** Format: uuid */
+            dtProjectUuid?: string;
+            bomSerialNumber?: string;
+            bomVersion?: number;
+            bomSha256?: string;
+            sourceRevision?: string;
+            label?: string;
+            /** Format: date-time */
+            createdAt?: string;
+            /** Format: date-time */
+            updatedAt?: string;
         };
-        CreateReleaseInput: {
-            version: string;
+        CreateVersionInput: {
+            versionString: string;
+            /**
+             * Format: uuid
+             * @description For a release line's first version, the main version it forks from.
+             */
+            forkedFromVersionId?: string;
+        };
+        UpdateVersionInput: {
+            versionString?: string;
+            /** @enum {string} */
+            status?: "incomplete" | "finalized";
+            location?: string;
+            customer?: string;
+            /**
+             * Format: date-time
+             * @description RFC3339 datetime. An empty string clears the release date.
+             */
+            releaseDate?: string;
+        };
+        SetProjectInput: {
+            /** Format: uuid */
+            dtProjectUuid?: string;
+            bomSerialNumber?: string;
+            bomVersion?: number;
+            bomSha256?: string;
+            sourceRevision?: string;
+            label?: string;
+        };
+        AddProjectInput: {
+            /** @enum {string} */
+            role: "PROFILE" | "SUB";
+            /** Format: uuid */
+            dtProjectUuid?: string;
+            bomSerialNumber?: string;
+            bomVersion?: number;
+            bomSha256?: string;
+            sourceRevision?: string;
+            label?: string;
         };
         ReleaseGraph: {
             rootNodeId?: string;
@@ -348,6 +444,57 @@ export interface components {
             maxNodesReached?: boolean;
             unresolvedLinks?: number;
             cyclesDetected?: number;
+        };
+        LineageGraph: {
+            /** Format: uuid */
+            productId?: string;
+            /** @enum {string} */
+            axis?: "version" | "releaseDate";
+            nodes?: components["schemas"]["LineageNode"][];
+            edges?: components["schemas"]["LineageEdge"][];
+        };
+        LineageNode: {
+            /** Format: uuid */
+            versionId?: string;
+            /** Format: uuid */
+            branchLineId?: string;
+            branchName?: string;
+            /** @enum {string} */
+            branchType?: "MAIN" | "RELEASE";
+            versionString?: string;
+            /** @enum {string} */
+            status?: "incomplete" | "finalized";
+            /** Format: date-time */
+            releaseDate?: string;
+            /** Format: date-time */
+            createdAt?: string;
+        };
+        LineageEdge: {
+            /** Format: uuid */
+            sourceVersionId?: string;
+            /** Format: uuid */
+            targetVersionId?: string;
+            /** @enum {string} */
+            kind?: "parent" | "fork";
+        };
+        Timeline: {
+            entries?: components["schemas"]["TimelineEntry"][];
+        };
+        TimelineEntry: {
+            /** Format: uuid */
+            versionId?: string;
+            /** Format: uuid */
+            branchLineId?: string;
+            branchName?: string;
+            /** @enum {string} */
+            branchType?: "MAIN" | "RELEASE";
+            versionString?: string;
+            /** @enum {string} */
+            status?: "incomplete" | "finalized";
+            /** Format: date-time */
+            releaseDate?: string;
+            /** Format: date-time */
+            createdAt?: string;
         };
         APIError: {
             error?: string;
@@ -388,7 +535,7 @@ export interface components {
     parameters: {
         ProductId: string;
         BranchId: string;
-        ReleaseId: string;
+        VersionId: string;
         Limit: number;
         Offset: number;
         MaxDepth: number;
@@ -641,81 +788,7 @@ export interface operations {
             };
         };
     };
-    getBranchCurrentState: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                branchId: components["parameters"]["BranchId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CurrentState"];
-                };
-            };
-        };
-    };
-    updateBranchCurrentState: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                branchId: components["parameters"]["BranchId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UpdateCurrentStateInput"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CurrentState"];
-                };
-            };
-        };
-    };
-    createMainSnapshot: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                branchId: components["parameters"]["BranchId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateSnapshotInput"];
-            };
-        };
-        responses: {
-            /** @description Created */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Snapshot"];
-                };
-            };
-        };
-    };
-    listReleases: {
+    listVersions: {
         parameters: {
             query?: {
                 limit?: components["parameters"]["Limit"];
@@ -735,12 +808,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Snapshot"][];
+                    "application/json": components["schemas"]["Version"][];
                 };
             };
         };
     };
-    createRelease: {
+    createVersion: {
         parameters: {
             query?: never;
             header?: never;
@@ -751,7 +824,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateReleaseInput"];
+                "application/json": components["schemas"]["CreateVersionInput"];
             };
         };
         responses: {
@@ -761,17 +834,19 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Snapshot"];
+                    "application/json": components["schemas"]["Version"];
                 };
             };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
         };
     };
-    getRelease: {
+    getVersion: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                releaseId: components["parameters"]["ReleaseId"];
+                versionId: components["parameters"]["VersionId"];
             };
             cookie?: never;
         };
@@ -783,18 +858,217 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Snapshot"];
+                    "application/json": components["schemas"]["Version"];
                 };
             };
             404: components["responses"]["NotFound"];
         };
     };
-    getBranchCurrentGraph: {
+    deleteVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                versionId: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    updateVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                versionId: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateVersionInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Version"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    setVersionRoot: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                versionId: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetProjectInput"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionDTProject"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    addVersionProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                versionId: components["parameters"]["VersionId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddProjectInput"];
+            };
+        };
+        responses: {
+            /** @description Created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["VersionDTProject"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+        };
+    };
+    removeVersionProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                versionId: components["parameters"]["VersionId"];
+                bindingId: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description No Content */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProjectGraph: {
         parameters: {
             query?: {
                 maxDepth?: components["parameters"]["MaxDepth"];
                 maxNodes?: components["parameters"]["MaxNodes"];
             };
+            header?: never;
+            path: {
+                versionId: components["parameters"]["VersionId"];
+                role: "ROOT" | "PROFILE" | "SUB";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReleaseGraph"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            404: components["responses"]["NotFound"];
+            502: components["responses"]["DTUnavailable"];
+        };
+    };
+    getProductLineage: {
+        parameters: {
+            query?: {
+                axis?: "version" | "releaseDate";
+            };
+            header?: never;
+            path: {
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LineageGraph"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getProductTimeline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                productId: components["parameters"]["ProductId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Timeline"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+        };
+    };
+    getBranchTimeline: {
+        parameters: {
+            query?: never;
             header?: never;
             path: {
                 branchId: components["parameters"]["BranchId"];
@@ -809,36 +1083,10 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleaseGraph"];
+                    "application/json": components["schemas"]["Timeline"];
                 };
             };
-            502: components["responses"]["DTUnavailable"];
-        };
-    };
-    getReleaseGraph: {
-        parameters: {
-            query?: {
-                maxDepth?: components["parameters"]["MaxDepth"];
-                maxNodes?: components["parameters"]["MaxNodes"];
-            };
-            header?: never;
-            path: {
-                releaseId: components["parameters"]["ReleaseId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ReleaseGraph"];
-                };
-            };
-            502: components["responses"]["DTUnavailable"];
+            404: components["responses"]["NotFound"];
         };
     };
 }

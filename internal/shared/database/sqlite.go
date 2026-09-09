@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS product (
     updated_at TEXT NOT NULL
 );
 
+-- branch_line: fork now points to a main VERSION, not a snapshot
 CREATE TABLE IF NOT EXISTS branch_line (
     id TEXT PRIMARY KEY,
     product_id TEXT NOT NULL REFERENCES product(id) ON DELETE CASCADE,
@@ -25,7 +26,7 @@ CREATE TABLE IF NOT EXISTS branch_line (
     name TEXT NOT NULL,
     display_name TEXT NOT NULL DEFAULT '',
     source_branch_line_id TEXT REFERENCES branch_line(id),
-    forked_from_snapshot_id TEXT,
+    forked_from_version_id TEXT REFERENCES version(id),
     status TEXT NOT NULL DEFAULT 'active'
         CHECK(status IN ('active','maintenance','security_only','end_of_support','closed')),
     created_at TEXT NOT NULL,
@@ -34,47 +35,39 @@ CREATE TABLE IF NOT EXISTS branch_line (
     UNIQUE(product_id, name)
 );
 
-CREATE TABLE IF NOT EXISTS branch_current_state (
-    branch_line_id TEXT PRIMARY KEY REFERENCES branch_line(id) ON DELETE CASCADE,
-    root_dt_project_uuid TEXT,
-    root_bom_serial_number TEXT,
-    root_bom_version INTEGER,
-    root_bom_sha256 TEXT,
-    source_revision TEXT,
-    updated_at TEXT NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS snapshot (
+-- version: replaces snapshot + branch_current_state (git-like commit on a branch line)
+CREATE TABLE IF NOT EXISTS version (
     id TEXT PRIMARY KEY,
     branch_line_id TEXT NOT NULL REFERENCES branch_line(id) ON DELETE CASCADE,
-    snapshot_type TEXT NOT NULL CHECK(snapshot_type IN ('MAIN_SNAPSHOT', 'RELEASE')),
-    version TEXT NOT NULL,
-    status TEXT NOT NULL DEFAULT 'draft'
-        CHECK(status IN ('draft','testing','approved','released','deprecated','end_of_support')),
-    root_dt_project_uuid TEXT,
-    root_bom_serial_number TEXT,
-    root_bom_version INTEGER,
-    root_bom_sha256 TEXT,
-    source_revision TEXT,
+    version_string TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'incomplete'
+        CHECK(status IN ('incomplete','finalized')),
+    parent_version_id TEXT REFERENCES version(id),
+    forked_from_version_id TEXT REFERENCES version(id),
+    location TEXT,
+    customer TEXT,
+    release_date TEXT,
     created_at TEXT NOT NULL,
-    released_at TEXT
+    updated_at TEXT NOT NULL,
+    UNIQUE(branch_line_id, version_string)
 );
+CREATE INDEX IF NOT EXISTS idx_version_branch ON version(branch_line_id);
+CREATE INDEX IF NOT EXISTS idx_version_parent ON version(parent_version_id);
+CREATE INDEX IF NOT EXISTS idx_version_fork ON version(forked_from_version_id);
 
-CREATE TABLE IF NOT EXISTS bom_link_index (
+-- role-tagged DT project bindings (many per version)
+CREATE TABLE IF NOT EXISTS version_dt_project (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    source_dt_project_uuid TEXT NOT NULL,
-    source_bom_serial TEXT,
-    source_bom_version INTEGER,
-    source_bom_ref TEXT,
-    target_serial TEXT,
-    target_bom_version INTEGER,
-    target_bom_ref TEXT,
-    target_dt_project_uuid TEXT,
-    resolution_status TEXT NOT NULL DEFAULT 'pending'
-        CHECK(resolution_status IN ('resolved','missing_project','missing_bom','missing_bom_ref','invalid','pending')),
+    version_id TEXT NOT NULL REFERENCES version(id) ON DELETE CASCADE,
+    role TEXT NOT NULL CHECK(role IN ('ROOT','PROFILE','SUB')),
+    dt_project_uuid TEXT,
+    bom_serial_number TEXT,
+    bom_version INTEGER,
+    bom_sha256 TEXT,
+    source_revision TEXT,
+    label TEXT,
+    created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
 );
-
-CREATE INDEX IF NOT EXISTS idx_bom_link_source ON bom_link_index(source_dt_project_uuid);
-CREATE INDEX IF NOT EXISTS idx_bom_link_target ON bom_link_index(target_dt_project_uuid);
+CREATE INDEX IF NOT EXISTS idx_vdp_version ON version_dt_project(version_id);
 `

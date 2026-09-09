@@ -4,7 +4,7 @@ import Layout from "./components/Layout";
 import ProductList from "./pages/ProductList";
 import ProductDetail from "./pages/ProductDetail";
 import BranchDetail from "./pages/BranchDetail";
-import ReleaseDetail from "./pages/ReleaseDetail";
+import VersionDetail from "./pages/VersionDetail";
 
 const queryClient = new QueryClient({
   defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false } },
@@ -20,7 +20,7 @@ function App() {
             <Route path="/products" element={<ProductList />} />
             <Route path="/products/:productId" element={<ProductDetail />} />
             <Route path="/branches/:branchId" element={<BranchDetail />} />
-            <Route path="/releases/:releaseId" element={<ReleaseDetail />} />
+            <Route path="/versions/:versionId" element={<VersionDetail />} />
           </Route>
         </Routes>
       </BrowserRouter>

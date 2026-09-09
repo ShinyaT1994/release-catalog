@@ -10,35 +10,16 @@ import (
 
 // Service implements UseCase for Branch
 type Service struct {
-	repo       Repository
-	csRepo     CurrentStateRepository
-	productFinder ProductFinder
-	snapshotFinder SnapshotFinder
+	repo           Repository
+	productFinder  ProductFinder
+	versionFinder  VersionFinder
+	versionCreator VersionCreator
 }
 
-// ProductFinder is used to verify product existence (avoids circular import)
-type ProductFinder interface {
-	FindByID(ctx context.Context, id string) (bool, error)
-}
-
-// SnapshotFinder is used to find a snapshot for fork point (avoids circular import)
-type SnapshotFinder interface {
-	FindByID(ctx context.Context, id string) (*SnapshotInfo, error)
-}
-
-// SnapshotInfo contains the minimal info needed from a snapshot
-type SnapshotInfo struct {
-	ID                string
-	RootDTProjectUUID *string
-	RootBOMSerial     *string
-	RootBOMVersion    *int
-	RootBOMSHA256     *string
-	SourceRevision    *string
-}
-
-// NewService creates a new branch service
-func NewService(repo Repository, csRepo CurrentStateRepository, productFinder ProductFinder, snapshotFinder SnapshotFinder) *Service {
-	return &Service{repo: repo, csRepo: csRepo, productFinder: productFinder, snapshotFinder: snapshotFinder}
+// NewService creates a new branch service. versionCreator may be nil (in which
+// case no first version is auto-created on release-line creation).
+func NewService(repo Repository, productFinder ProductFinder, versionFinder VersionFinder, versionCreator VersionCreator) *Service {
+	return &Service{repo: repo, productFinder: productFinder, versionFinder: versionFinder, versionCreator: versionCreator}
 }
 
 func (s *Service) CreateReleaseLine(ctx context.Context, productID string, input CreateReleaseLineInput) (*BranchLine, error) {
@@ -62,49 +43,57 @@ func (s *Service) CreateReleaseLine(ctx context.Context, productID string, input
 		return nil, apperror.New(apperror.CodeInternalError, "main branch not found")
 	}
 
+	// Validate the fork-point version if provided: it must exist and belong to
+	// this product's main branch.
+	var forkedVersionString string
+	if input.ForkedFromVersionID != nil {
+		vi, err := s.versionFinder.FindByID(ctx, *input.ForkedFromVersionID)
+		if err != nil {
+			return nil, apperror.New(apperror.CodeInternalError, err.Error())
+		}
+		if vi == nil {
+			return nil, apperror.New(apperror.CodeVersionNotFound, "forked-from version not found")
+		}
+		if vi.BranchLineID != mainBranch.ID {
+			return nil, apperror.New(apperror.CodeInvalidRequest, "forked-from version must belong to the main branch")
+		}
+		forkedVersionString = vi.VersionString
+	}
+
 	now := time.Now().UTC()
 	b := &BranchLine{
-		ID:                 uuid.New().String(),
-		ProductID:          productID,
-		Type:               TypeRelease,
-		Name:               input.Name,
-		DisplayName:        input.DisplayName,
-		SourceBranchLineID: &mainBranch.ID,
-		ForkedFromSnapshotID: input.ForkedFromSnapshotID,
-		Status:             StatusActive,
-		CreatedAt:          now,
-		UpdatedAt:          now,
+		ID:                  uuid.New().String(),
+		ProductID:           productID,
+		Type:                TypeRelease,
+		Name:                input.Name,
+		DisplayName:         input.DisplayName,
+		SourceBranchLineID:  &mainBranch.ID,
+		ForkedFromVersionID: input.ForkedFromVersionID,
+		Status:              StatusActive,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 
 	if err := s.repo.Create(ctx, b); err != nil {
-		return nil, apperror.New(apperror.CodeInternalError, "failed to create release line: "+err.Error())
+		return nil, apperror.New(apperror.CodeConflict, "failed to create release line: "+err.Error())
 	}
 
-	// Initialize current state - copy from fork source
-	cs := &CurrentState{BranchLineID: b.ID, UpdatedAt: now}
-
-	if input.ForkedFromSnapshotID != nil {
-		snap, err := s.snapshotFinder.FindByID(ctx, *input.ForkedFromSnapshotID)
-		if err == nil && snap != nil {
-			cs.RootDTProjectUUID = snap.RootDTProjectUUID
-			cs.RootBOMSerial = snap.RootBOMSerial
-			cs.RootBOMVersion = snap.RootBOMVersion
-			cs.RootBOMSHA256 = snap.RootBOMSHA256
-			cs.SourceRevision = snap.SourceRevision
+	// Auto-create the release branch's first version when it forks from a main
+	// version. The version usecase defaults the ROOT binding from the forked
+	// main version and sets status "incomplete"; users then add PROFILE/SUB
+	// bindings. The initial versionString inherits the forked main version's
+	// string.
+	if input.ForkedFromVersionID != nil && s.versionCreator != nil {
+		vs := forkedVersionString
+		if vs == "" {
+			vs = "0.1.0"
 		}
-	} else {
-		mainCS, _ := s.csRepo.FindByBranchID(ctx, mainBranch.ID)
-		if mainCS != nil {
-			cs.RootDTProjectUUID = mainCS.RootDTProjectUUID
-			cs.RootBOMSerial = mainCS.RootBOMSerial
-			cs.RootBOMVersion = mainCS.RootBOMVersion
-			cs.RootBOMSHA256 = mainCS.RootBOMSHA256
-			cs.SourceRevision = mainCS.SourceRevision
+		if err := s.versionCreator.CreateFirstVersion(ctx, b.ID, CreateFirstVersionInput{
+			VersionString:       vs,
+			ForkedFromVersionID: input.ForkedFromVersionID,
+		}); err != nil {
+			return nil, apperror.New(apperror.CodeInternalError, "failed to create initial version: "+err.Error())
 		}
-	}
-
-	if err := s.csRepo.Upsert(ctx, cs); err != nil {
-		return nil, apperror.New(apperror.CodeInternalError, "failed to initialize current state: "+err.Error())
 	}
 
 	return b, nil
@@ -157,48 +146,4 @@ func (s *Service) Update(ctx context.Context, id string, input UpdateBranchInput
 		return nil, apperror.New(apperror.CodeInternalError, err.Error())
 	}
 	return b, nil
-}
-
-func (s *Service) GetCurrentState(ctx context.Context, branchID string) (*CurrentState, error) {
-	b, err := s.repo.FindByID(ctx, branchID)
-	if err != nil {
-		return nil, apperror.New(apperror.CodeInternalError, err.Error())
-	}
-	if b == nil {
-		return nil, apperror.New(apperror.CodeBranchNotFound, "branch not found")
-	}
-
-	cs, err := s.csRepo.FindByBranchID(ctx, branchID)
-	if err != nil {
-		return nil, apperror.New(apperror.CodeInternalError, err.Error())
-	}
-	if cs == nil {
-		return &CurrentState{BranchLineID: branchID, UpdatedAt: time.Now().UTC()}, nil
-	}
-	return cs, nil
-}
-
-func (s *Service) UpdateCurrentState(ctx context.Context, branchID string, input UpdateCurrentStateInput) (*CurrentState, error) {
-	b, err := s.repo.FindByID(ctx, branchID)
-	if err != nil {
-		return nil, apperror.New(apperror.CodeInternalError, err.Error())
-	}
-	if b == nil {
-		return nil, apperror.New(apperror.CodeBranchNotFound, "branch not found")
-	}
-
-	cs := &CurrentState{
-		BranchLineID:      branchID,
-		RootDTProjectUUID: input.RootDTProjectUUID,
-		RootBOMSerial:     input.RootBOMSerial,
-		RootBOMVersion:    input.RootBOMVersion,
-		RootBOMSHA256:     input.RootBOMSHA256,
-		SourceRevision:    input.SourceRevision,
-		UpdatedAt:         time.Now().UTC(),
-	}
-
-	if err := s.csRepo.Upsert(ctx, cs); err != nil {
-		return nil, apperror.New(apperror.CodeInternalError, err.Error())
-	}
-	return cs, nil
 }

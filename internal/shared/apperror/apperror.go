@@ -10,6 +10,7 @@ const (
 	CodeProductNotFound     Code = "PRODUCT_NOT_FOUND"
 	CodeBranchNotFound      Code = "BRANCH_NOT_FOUND"
 	CodeReleaseNotFound     Code = "RELEASE_NOT_FOUND"
+	CodeVersionNotFound     Code = "VERSION_NOT_FOUND"
 	CodeRootProjectNotFound Code = "ROOT_PROJECT_NOT_FOUND"
 	CodeRootBOMChanged      Code = "ROOT_BOM_CHANGED"
 	CodeBOMLinkInvalid      Code = "BOM_LINK_INVALID"

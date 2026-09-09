@@ -21,17 +21,37 @@ func setupTestDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// mockProductFinder always returns true
+// mockProductFinder always returns true.
 type mockProductFinder struct{}
 
 func (m *mockProductFinder) FindByID(ctx context.Context, id string) (bool, error) {
 	return true, nil
 }
 
-type mockSnapshotFinder struct{}
+// mockVersionFinder returns a configurable version for fork validation.
+type mockVersionFinder struct {
+	info *branch.VersionInfo
+}
 
-func (m *mockSnapshotFinder) FindByID(ctx context.Context, id string) (*branch.SnapshotInfo, error) {
+func (m *mockVersionFinder) FindByID(ctx context.Context, id string) (*branch.VersionInfo, error) {
+	if m.info != nil && m.info.ID == id {
+		return m.info, nil
+	}
 	return nil, nil
+}
+
+// mockVersionCreator records calls to CreateFirstVersion.
+type mockVersionCreator struct {
+	called   bool
+	branchID string
+	input    branch.CreateFirstVersionInput
+}
+
+func (m *mockVersionCreator) CreateFirstVersion(ctx context.Context, branchID string, input branch.CreateFirstVersionInput) error {
+	m.called = true
+	m.branchID = branchID
+	m.input = input
+	return nil
 }
 
 func seedMainBranch(t *testing.T, db *sql.DB, productID string) *branch.BranchLine {
@@ -63,8 +83,7 @@ func TestCreateReleaseLine(t *testing.T) {
 	seedMainBranch(t, db, productID)
 
 	repo := branch.NewSQLiteRepository(db)
-	csRepo := branch.NewSQLiteCurrentStateRepository(db)
-	svc := branch.NewService(repo, csRepo, &mockProductFinder{}, &mockSnapshotFinder{})
+	svc := branch.NewService(repo, &mockProductFinder{}, &mockVersionFinder{}, nil)
 
 	ctx := context.Background()
 	b, err := svc.CreateReleaseLine(ctx, productID, branch.CreateReleaseLineInput{
@@ -77,49 +96,62 @@ func TestCreateReleaseLine(t *testing.T) {
 	assert.Equal(t, branch.TypeRelease, b.Type)
 	assert.Equal(t, "release/2.x", b.Name)
 	assert.Equal(t, branch.StatusActive, b.Status)
+	assert.Nil(t, b.ForkedFromVersionID)
 }
 
-func TestReleaseLine_IndependentFromMain(t *testing.T) {
+func TestCreateReleaseLine_ForkFromMainVersion(t *testing.T) {
 	db := setupTestDB(t)
 	defer db.Close()
 
 	productID := seedProduct(t, db)
 	mainBranch := seedMainBranch(t, db, productID)
 
+	// Seed a main version to fork from.
+	versionID := uuid.New().String()
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := db.Exec(`INSERT INTO version (id, branch_line_id, version_string, status, created_at, updated_at) VALUES (?, ?, ?, 'finalized', ?, ?)`,
+		versionID, mainBranch.ID, "1.0", now, now)
+	require.NoError(t, err)
+
 	repo := branch.NewSQLiteRepository(db)
-	csRepo := branch.NewSQLiteCurrentStateRepository(db)
-	svc := branch.NewService(repo, csRepo, &mockProductFinder{}, &mockSnapshotFinder{})
-	ctx := context.Background()
+	vf := &mockVersionFinder{info: &branch.VersionInfo{ID: versionID, BranchLineID: mainBranch.ID, VersionString: "1.0"}}
+	vc := &mockVersionCreator{}
+	svc := branch.NewService(repo, &mockProductFinder{}, vf, vc)
 
-	// Set main current state
-	mainProjectUUID := "00000000-0000-0000-0000-000000000001"
-	_, err := svc.UpdateCurrentState(ctx, mainBranch.ID, branch.UpdateCurrentStateInput{
-		RootDTProjectUUID: &mainProjectUUID,
+	b, err := svc.CreateReleaseLine(context.Background(), productID, branch.CreateReleaseLineInput{
+		Name:                "release/1.x",
+		ForkedFromVersionID: &versionID,
 	})
 	require.NoError(t, err)
+	require.NotNil(t, b.ForkedFromVersionID)
+	assert.Equal(t, versionID, *b.ForkedFromVersionID)
+	assert.Equal(t, &mainBranch.ID, b.SourceBranchLineID)
 
-	// Create release line (forks from main current)
-	releaseBranch, err := svc.CreateReleaseLine(ctx, productID, branch.CreateReleaseLineInput{
-		Name: "release/1.x",
+	// The first version must be auto-created on the new release branch, forked
+	// from the main version, inheriting its version string.
+	assert.True(t, vc.called, "expected first version to be auto-created")
+	assert.Equal(t, b.ID, vc.branchID)
+	require.NotNil(t, vc.input.ForkedFromVersionID)
+	assert.Equal(t, versionID, *vc.input.ForkedFromVersionID)
+	assert.Equal(t, "1.0", vc.input.VersionString)
+}
+
+func TestCreateReleaseLine_ForkVersionNotFound(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	productID := seedProduct(t, db)
+	seedMainBranch(t, db, productID)
+
+	repo := branch.NewSQLiteRepository(db)
+	svc := branch.NewService(repo, &mockProductFinder{}, &mockVersionFinder{}, nil)
+
+	missing := uuid.New().String()
+	_, err := svc.CreateReleaseLine(context.Background(), productID, branch.CreateReleaseLineInput{
+		Name:                "release/1.x",
+		ForkedFromVersionID: &missing,
 	})
-	require.NoError(t, err)
-
-	// Update main - should NOT affect release
-	newMainUUID := "00000000-0000-0000-0000-000000000099"
-	_, err = svc.UpdateCurrentState(ctx, mainBranch.ID, branch.UpdateCurrentStateInput{
-		RootDTProjectUUID: &newMainUUID,
-	})
-	require.NoError(t, err)
-
-	// Release branch current should still point to original
-	releaseCS, err := svc.GetCurrentState(ctx, releaseBranch.ID)
-	require.NoError(t, err)
-	assert.Equal(t, &mainProjectUUID, releaseCS.RootDTProjectUUID)
-
-	// Main current should have new value
-	mainCS, err := svc.GetCurrentState(ctx, mainBranch.ID)
-	require.NoError(t, err)
-	assert.Equal(t, &newMainUUID, mainCS.RootDTProjectUUID)
+	require.Error(t, err)
 }
 
 func TestUpdateBranchStatus(t *testing.T) {
@@ -130,8 +162,7 @@ func TestUpdateBranchStatus(t *testing.T) {
 	seedMainBranch(t, db, productID)
 
 	repo := branch.NewSQLiteRepository(db)
-	csRepo := branch.NewSQLiteCurrentStateRepository(db)
-	svc := branch.NewService(repo, csRepo, &mockProductFinder{}, &mockSnapshotFinder{})
+	svc := branch.NewService(repo, &mockProductFinder{}, &mockVersionFinder{}, nil)
 	ctx := context.Background()
 
 	b, _ := svc.CreateReleaseLine(ctx, productID, branch.CreateReleaseLineInput{Name: "release/1.x"})

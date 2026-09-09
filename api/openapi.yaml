@@ -181,42 +181,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/BranchLine"
 
-  /api/v1/branches/{branchId}/current:
-    get:
-      summary: Get branch current state
-      operationId: getBranchCurrentState
-      parameters:
-        - $ref: "#/components/parameters/BranchId"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CurrentState"
-    put:
-      summary: Update branch current state
-      operationId: updateBranchCurrentState
-      parameters:
-        - $ref: "#/components/parameters/BranchId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/UpdateCurrentStateInput"
-      responses:
-        "200":
-          description: OK
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/CurrentState"
-
-  /api/v1/branches/{branchId}/snapshots:
+  /api/v1/branches/{branchId}/versions:
     post:
-      summary: Create a main snapshot
-      operationId: createMainSnapshot
+      summary: Create (preset) a version
+      description: |
+        Presets a git-like version on the branch line. Only `versionString` is
+        required; DT projects and release metadata are filled in later.
+      operationId: createVersion
       parameters:
         - $ref: "#/components/parameters/BranchId"
       requestBody:
@@ -224,37 +195,21 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateSnapshotInput"
+              $ref: "#/components/schemas/CreateVersionInput"
       responses:
         "201":
           description: Created
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Snapshot"
-
-  /api/v1/branches/{branchId}/releases:
-    post:
-      summary: Create a release
-      operationId: createRelease
-      parameters:
-        - $ref: "#/components/parameters/BranchId"
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/CreateReleaseInput"
-      responses:
-        "201":
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Snapshot"
+                $ref: "#/components/schemas/Version"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
     get:
-      summary: List releases for a branch
-      operationId: listReleases
+      summary: List versions on a branch (ordered by release datetime)
+      operationId: listVersions
       parameters:
         - $ref: "#/components/parameters/BranchId"
         - $ref: "#/components/parameters/Limit"
@@ -267,30 +222,129 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Snapshot"
+                  $ref: "#/components/schemas/Version"
 
-  /api/v1/releases/{releaseId}:
+  /api/v1/versions/{versionId}:
     get:
-      summary: Get a release
-      operationId: getRelease
+      summary: Get a version (incl. role-tagged projects)
+      operationId: getVersion
       parameters:
-        - $ref: "#/components/parameters/ReleaseId"
+        - $ref: "#/components/parameters/VersionId"
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/Snapshot"
+                $ref: "#/components/schemas/Version"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      summary: Edit any field (soft immutability)
+      operationId: updateVersion
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateVersionInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Version"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    delete:
+      summary: Delete a version
+      operationId: deleteVersion
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+      responses:
+        "204":
+          description: No Content
         "404":
           $ref: "#/components/responses/NotFound"
 
-  /api/v1/branches/{branchId}/current/graph:
-    get:
-      summary: Get release graph for branch current state
-      operationId: getBranchCurrentGraph
+  /api/v1/versions/{versionId}/projects/root:
+    put:
+      summary: Set or replace the single ROOT DT project binding
+      operationId: setVersionRoot
       parameters:
-        - $ref: "#/components/parameters/BranchId"
+        - $ref: "#/components/parameters/VersionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SetProjectInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionDTProject"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/versions/{versionId}/projects:
+    post:
+      summary: Add a PROFILE or SUB DT project binding
+      operationId: addVersionProject
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddProjectInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/VersionDTProject"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/versions/{versionId}/projects/{bindingId}:
+    delete:
+      summary: Remove a DT project binding
+      operationId: removeVersionProject
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+        - name: bindingId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: No Content
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/versions/{versionId}/projects/{role}/graph:
+    get:
+      summary: BOM-Link SBOM graph for one role-tagged project
+      operationId: getProjectGraph
+      parameters:
+        - $ref: "#/components/parameters/VersionId"
+        - name: role
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ROOT, PROFILE, SUB]
         - $ref: "#/components/parameters/MaxDepth"
         - $ref: "#/components/parameters/MaxNodes"
       responses:
@@ -300,26 +354,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ReleaseGraph"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "502":
           $ref: "#/components/responses/DTUnavailable"
 
-  /api/v1/releases/{releaseId}/graph:
+  /api/v1/products/{productId}/lineage-graph:
     get:
-      summary: Get release graph for a release
-      operationId: getReleaseGraph
+      summary: Version-lineage graph (RC DB only)
+      description: |
+        Nodes are versions; edges are parent/fork lineage. Built purely from the
+        release catalog database — never calls Dependency-Track and cannot 502.
+      operationId: getProductLineage
       parameters:
-        - $ref: "#/components/parameters/ReleaseId"
-        - $ref: "#/components/parameters/MaxDepth"
-        - $ref: "#/components/parameters/MaxNodes"
+        - $ref: "#/components/parameters/ProductId"
+        - name: axis
+          in: query
+          schema:
+            type: string
+            enum: [version, releaseDate]
+            default: releaseDate
       responses:
         "200":
           description: OK
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReleaseGraph"
-        "502":
-          $ref: "#/components/responses/DTUnavailable"
+                $ref: "#/components/schemas/LineageGraph"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/products/{productId}/timeline:
+    get:
+      summary: Product-scope release timeline (all branches)
+      operationId: getProductTimeline
+      parameters:
+        - $ref: "#/components/parameters/ProductId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timeline"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /api/v1/branches/{branchId}/timeline:
+    get:
+      summary: Branch-scope release timeline
+      operationId: getBranchTimeline
+      parameters:
+        - $ref: "#/components/parameters/BranchId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Timeline"
+        "404":
+          $ref: "#/components/responses/NotFound"
 
 components:
   parameters:
@@ -337,8 +434,8 @@ components:
       schema:
         type: string
         format: uuid
-    ReleaseId:
-      name: releaseId
+    VersionId:
+      name: versionId
       in: path
       required: true
       schema:
@@ -427,7 +524,7 @@ components:
         sourceBranchLineId:
           type: string
           format: uuid
-        forkedFromSnapshotId:
+        forkedFromVersionId:
           type: string
           format: uuid
         status:
@@ -451,9 +548,10 @@ components:
           type: string
         displayName:
           type: string
-        forkedFromSnapshotId:
+        forkedFromVersionId:
           type: string
           format: uuid
+          description: A main-branch version to fork the release line from.
 
     UpdateBranchInput:
       type: object
@@ -464,43 +562,7 @@ components:
           type: string
           enum: [active, maintenance, security_only, end_of_support, closed]
 
-    CurrentState:
-      type: object
-      properties:
-        branchLineId:
-          type: string
-          format: uuid
-        rootDtProjectUuid:
-          type: string
-          format: uuid
-        rootBomSerialNumber:
-          type: string
-        rootBomVersion:
-          type: integer
-        rootBomSha256:
-          type: string
-        sourceRevision:
-          type: string
-        updatedAt:
-          type: string
-          format: date-time
-
-    UpdateCurrentStateInput:
-      type: object
-      properties:
-        rootDtProjectUuid:
-          type: string
-          format: uuid
-        rootBomSerialNumber:
-          type: string
-        rootBomVersion:
-          type: integer
-        rootBomSha256:
-          type: string
-        sourceRevision:
-          type: string
-
-    Snapshot:
+    Version:
       type: object
       properties:
         id:
@@ -509,44 +571,130 @@ components:
         branchLineId:
           type: string
           format: uuid
-        snapshotType:
-          type: string
-          enum: [MAIN_SNAPSHOT, RELEASE]
-        version:
+        versionString:
           type: string
         status:
           type: string
-          enum: [draft, testing, approved, released, deprecated, end_of_support]
-        rootDtProjectUuid:
+          enum: [incomplete, finalized]
+        parentVersionId:
           type: string
           format: uuid
-        rootBomSerialNumber:
+        forkedFromVersionId:
           type: string
-        rootBomVersion:
+          format: uuid
+        location:
+          type: string
+        customer:
+          type: string
+        releaseDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        projects:
+          type: array
+          items:
+            $ref: "#/components/schemas/VersionDTProject"
+
+    VersionDTProject:
+      type: object
+      properties:
+        id:
           type: integer
-        rootBomSha256:
+        versionId:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [ROOT, PROFILE, SUB]
+        dtProjectUuid:
+          type: string
+          format: uuid
+        bomSerialNumber:
+          type: string
+        bomVersion:
+          type: integer
+        bomSha256:
           type: string
         sourceRevision:
+          type: string
+        label:
           type: string
         createdAt:
           type: string
           format: date-time
-        releasedAt:
+        updatedAt:
           type: string
           format: date-time
 
-    CreateSnapshotInput:
+    CreateVersionInput:
       type: object
-      required: [version]
+      required: [versionString]
       properties:
-        version:
+        versionString:
+          type: string
+        forkedFromVersionId:
+          type: string
+          format: uuid
+          description: For a release line's first version, the main version it forks from.
+
+    UpdateVersionInput:
+      type: object
+      properties:
+        versionString:
+          type: string
+        status:
+          type: string
+          enum: [incomplete, finalized]
+        location:
+          type: string
+        customer:
+          type: string
+        releaseDate:
+          type: string
+          format: date-time
+          description: RFC3339 datetime. An empty string clears the release date.
+
+    SetProjectInput:
+      type: object
+      properties:
+        dtProjectUuid:
+          type: string
+          format: uuid
+        bomSerialNumber:
+          type: string
+        bomVersion:
+          type: integer
+        bomSha256:
+          type: string
+        sourceRevision:
+          type: string
+        label:
           type: string
 
-    CreateReleaseInput:
+    AddProjectInput:
       type: object
-      required: [version]
+      required: [role]
       properties:
-        version:
+        role:
+          type: string
+          enum: [PROFILE, SUB]
+        dtProjectUuid:
+          type: string
+          format: uuid
+        bomSerialNumber:
+          type: string
+        bomVersion:
+          type: integer
+        bomSha256:
+          type: string
+        sourceRevision:
+          type: string
+        label:
           type: string
 
     ReleaseGraph:
@@ -612,6 +760,97 @@ components:
           type: integer
         cyclesDetected:
           type: integer
+
+    LineageGraph:
+      type: object
+      properties:
+        productId:
+          type: string
+          format: uuid
+        axis:
+          type: string
+          enum: [version, releaseDate]
+        nodes:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineageNode"
+        edges:
+          type: array
+          items:
+            $ref: "#/components/schemas/LineageEdge"
+
+    LineageNode:
+      type: object
+      properties:
+        versionId:
+          type: string
+          format: uuid
+        branchLineId:
+          type: string
+          format: uuid
+        branchName:
+          type: string
+        branchType:
+          type: string
+          enum: [MAIN, RELEASE]
+        versionString:
+          type: string
+        status:
+          type: string
+          enum: [incomplete, finalized]
+        releaseDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    LineageEdge:
+      type: object
+      properties:
+        sourceVersionId:
+          type: string
+          format: uuid
+        targetVersionId:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          enum: [parent, fork]
+
+    Timeline:
+      type: object
+      properties:
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/TimelineEntry"
+
+    TimelineEntry:
+      type: object
+      properties:
+        versionId:
+          type: string
+          format: uuid
+        branchLineId:
+          type: string
+          format: uuid
+        branchName:
+          type: string
+        branchType:
+          type: string
+          enum: [MAIN, RELEASE]
+        versionString:
+          type: string
+        status:
+          type: string
+          enum: [incomplete, finalized]
+        releaseDate:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
 
     APIError:
       type: object
